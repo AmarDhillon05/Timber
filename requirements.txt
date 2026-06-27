@@ -1,0 +1,10 @@
+# core
+numpy>=2.0
+scipy>=1.10
+soundfile>=0.12
+
+# dynamics and spatial effects (blanket.py: punch, sustain, dynamic_range, consistency, pumping, depth, naturalness)
+pedalboard>=0.9
+
+# noise reduction (blanket.py: denoise, roominess)
+noisereduce>=3.0

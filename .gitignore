@@ -1,0 +1,31 @@
+.claude
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Node / Expo (mobile/ has its own; this catches stray installs at the root)
+node_modules/
+dist/
+.expo/
+
+# Models / large artifacts
+hub/
+inference/checkpoints/
+*.pt
+*.ckpt
+*.onnx
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
