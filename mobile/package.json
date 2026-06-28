@@ -1,0 +1,43 @@
+{
+  "name": "mobile",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@react-native-community/slider": "5.2.0",
+    "expo": "~56.0.12",
+    "expo-camera": "~56.0.8",
+    "expo-dev-client": "^56.0.20",
+    "expo-document-picker": "^56.0.4",
+    "expo-file-system": "^56.0.8",
+    "expo-status-bar": "~56.0.4",
+    "expo-video": "~56.1.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-audio-api": "^0.12.2",
+    "react-native-web": "^0.21.2",
+    "react-native-worklets": "^0.8.3",
+    "zustand": "^5.0.14"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "apple": "expo start --ios",
+    "web": "expo start --web",
+    "win:web": "expo start --web",
+    "electron:export": "expo export -p web",
+    "electron:run": "electron electron/main.js",
+    "win:electron": "expo export -p web && electron electron/main.js",
+    "win:electron:dev": "concurrently -k -n web,electron \"expo start --web --port 8081\" \"wait-on tcp:127.0.0.1:8081 && cross-env ELECTRON_START_URL=http://localhost:8081 electron electron/main.js\""
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "typescript": "^6.0.3",
+    "wait-on": "^8.0.1"
+  }
+}
