@@ -1,19 +1,14 @@
 import { encodeWavMono16 } from '../audio/wav';
 import { BLANKET_TERM_KEYS, type BlanketTerm } from '../dsp/blanketTerms';
+import { postSuggest } from './inferenceApi';
 import type { Channels } from '../dsp';
 import type { BlanketValues } from '../data/TrackFile';
 
-// The /inference FastAPI service: listens to the audio with an audio model
-// (ast | beats | clap) and returns a suggested amount (0–1) per blanket term.
-const BASE_URL = process.env.EXPO_PUBLIC_INFERENCE_URL ?? 'http://localhost:8000';
-const MODEL = process.env.EXPO_PUBLIC_INFERENCE_MODEL ?? 'clap';
+// Suggest blanket amounts for a clip via the /inference service. The HTTP plumbing
+// and error handling live in inferenceApi; this module just builds the upload and
+// maps the response onto our blanket values.
 
 const TERM_SET = new Set<string>(BLANKET_TERM_KEYS);
-
-interface SuggestResponse {
-  model: string;
-  suggestions: { term: string; amount: number }[];
-}
 
 export interface SuggestOptions {
   // Free-text appended to every CLAP prompt to bias scoring (e.g. "live drum
@@ -50,14 +45,7 @@ export async function suggestBlanket(
     if (Object.keys(incl).length > 0) form.append('inclination', JSON.stringify(incl));
   }
 
-  const res = await fetch(`${BASE_URL}/suggest?model=${encodeURIComponent(MODEL)}`, {
-    method: 'POST',
-    body: form,
-  });
-  if (!res.ok) {
-    throw new Error(`Inference API ${res.status}: ${await res.text()}`);
-  }
-  const data = (await res.json()) as SuggestResponse;
+  const data = await postSuggest(form);
 
   const values = {} as BlanketValues;
   for (const key of BLANKET_TERM_KEYS) values[key] = 0;

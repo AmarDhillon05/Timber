@@ -63,13 +63,10 @@ export async function importVideo(
   // VIDEO comes from the first source only; the rest are audio-only tracks.
   const stamp = Date.now().toString(36);
   const tracks = [];
-  const sizeByTrack: Record<string, number | undefined> = {};
   for (let i = 0; i < result.assets.length; i++) {
     const asset = result.assets[i];
     const uri = await persist(asset.uri, `${stamp}-${i}-${asset.name}`);
-    const track = makeTrack({ name: trackName(asset.name), uri });
-    tracks.push(track);
-    sizeByTrack[track.id] = asset.size;
+    tracks.push(makeTrack({ name: trackName(asset.name), uri }));
   }
 
   const first = result.assets[0];
@@ -82,7 +79,7 @@ export async function importVideo(
   // Editor opens now; each track's PCM fills in later.
   useSession.getState().load(file);
   for (const track of tracks) {
-    void decodeInBackground(track.id, track.uri, sizeByTrack[track.id]);
+    void decodeInBackground(track.id, track.uri);
   }
 
   return { status: 'imported' };
@@ -91,9 +88,7 @@ export async function importVideo(
 // Decode one track's audio to PCM (resampled to 48 kHz) off the critical path
 // and commit it to its track. Deliberately not awaited so the editor isn't
 // blocked; the decode itself already runs on a native thread.
-async function decodeInBackground(id: string, uri: string, size?: number): Promise<void> {
-  const t = Date.now();
+async function decodeInBackground(id: string, uri: string): Promise<void> {
   const audio = await AudioFile.decode(uri);
-  console.log(`[importVideo] decode ${id} ${Date.now() - t}ms (${size ?? '?'} bytes)`);
   useSession.getState().setTrackPcm(id, audio.data);
 }

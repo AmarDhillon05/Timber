@@ -1,10 +1,18 @@
-import type { MicRecorder, MicRecording } from './micRecorder.types';
+import type {
+  MicRecorder,
+  MicRecording,
+  MicRecorderOptions,
+} from './micRecorder.types';
 
-export type { MicRecorder, MicRecording } from './micRecorder.types';
+export type {
+  MicRecorder,
+  MicRecording,
+  MicRecorderOptions,
+} from './micRecorder.types';
 
 // Web mic capture → an opus/webm blob, via getUserMedia + MediaRecorder. This is
 // the browser/Electron counterpart to the native AudioRecorder path.
-export function createMicRecorder(): MicRecorder {
+export function createMicRecorder(opts: MicRecorderOptions = {}): MicRecorder {
   let stream: MediaStream | null = null;
   let recorder: MediaRecorder | null = null;
   let chunks: Blob[] = [];
@@ -20,13 +28,13 @@ export function createMicRecorder(): MicRecorder {
 
   return {
     async start() {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const track = stream.getAudioTracks()[0];
-      console.log(
-        '[peripheral] mic (web):',
-        track?.label || '(unnamed)',
-        track?.getSettings?.(),
-      );
+      // Pin the chosen input when one was selected; otherwise let the browser
+      // pick its default. `exact` makes a missing/unauthorized device fail loudly
+      // rather than silently falling back (per the project's error policy).
+      const audio: MediaTrackConstraints | boolean = opts.deviceId
+        ? { deviceId: { exact: opts.deviceId } }
+        : true;
+      stream = await navigator.mediaDevices.getUserMedia({ audio });
       mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : 'audio/webm';

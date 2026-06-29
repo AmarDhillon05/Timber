@@ -53,7 +53,6 @@ export function usePreview(player: VideoPlayer) {
     sourceRef.current = src;
     startCtxTimeRef.current = ctx.currentTime;
     startOffsetRef.current = offset;
-    console.log('[preview] startSource', { offset, ctxState: ctx.state });
   };
 
   const audioPosition = (): number => {
@@ -70,10 +69,8 @@ export function usePreview(player: VideoPlayer) {
     ctxRef.current = ctx;
     player.muted = true; // our graph is the audio now
     player.timeUpdateEventInterval = 0.25; // enable drift checks
-    console.log('[preview] ctx created', { ctxState: ctx.state });
 
     const onPlaying = player.addListener('playingChange', ({ isPlaying }) => {
-      console.log('[preview] playingChange', { isPlaying, ctxState: ctx.state });
       if (isPlaying) {
         ctx.resume();
         startSource(player.currentTime);
@@ -105,12 +102,7 @@ export function usePreview(player: VideoPlayer) {
     if (decoding) return;
     const track = activeTrack(useSession.getState());
     const pcm = track?.pcm;
-    console.log('[preview] render effect', { decoding, hasPcm: !!pcm });
     if (!pcm || !track) return;
-
-    const active = Object.fromEntries(
-      Object.entries(values).filter(([, amount]) => amount > 0),
-    );
 
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -118,15 +110,6 @@ export function usePreview(player: VideoPlayer) {
       const ctx = ctxRef.current;
       if (cancelled || !ctx) return;
       bufferRef.current = channelsToBuffer(ctx, channels);
-
-      // The audio buffer just changed to reflect the current slider values.
-      const live = !!sourceRef.current || player.playing;
-      console.log('[preview] audio modified', {
-        active,
-        terms: Object.keys(active).length,
-        duration: bufferRef.current.duration,
-        appliedLive: live, // false = buffered, will be heard on next play
-      });
 
       // Reflect the new audio right away if we are (or should be) playing.
       if (sourceRef.current) startSource(audioPosition());

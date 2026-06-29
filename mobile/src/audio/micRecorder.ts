@@ -1,11 +1,21 @@
 import { AudioRecorder, FileDirectory, FileFormat } from 'react-native-audio-api';
-import type { MicRecorder, MicRecording } from './micRecorder.types';
+import type {
+  MicRecorder,
+  MicRecording,
+  MicRecorderOptions,
+} from './micRecorder.types';
 
-export type { MicRecorder, MicRecording } from './micRecorder.types';
+export type {
+  MicRecorder,
+  MicRecording,
+  MicRecorderOptions,
+} from './micRecorder.types';
 
 // Native mic capture → a WAV file in the document directory, via
 // react-native-audio-api's AudioRecorder. (The web build uses micRecorder.web.)
-export function createMicRecorder(): MicRecorder {
+// The input device is chosen via the audio session (useAudioInput in the UI),
+// so the deviceId option is web-only and ignored here.
+export function createMicRecorder(_opts: MicRecorderOptions = {}): MicRecorder {
   let rec: AudioRecorder | null = null;
 
   return {
@@ -21,7 +31,6 @@ export function createMicRecorder(): MicRecorder {
         throw new Error('Mic recorder failed to start');
       }
       rec = r;
-      console.log('[peripheral] mic (native): AudioRecorder started → WAV, document dir');
     },
 
     async stop(): Promise<MicRecording> {

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from './src/state/session';
+import { useBackend } from './src/state/backend';
 import UploadScreen from './src/screens/UploadScreen';
 import EditScreen from './src/screens/EditScreen';
 import RecordScreen from './src/screens/RecordScreen';
@@ -14,6 +15,12 @@ import RecordScreen from './src/screens/RecordScreen';
 export default function App() {
   const hasFile = useSession((s) => s.file !== null);
   const [recording, setRecording] = useState(false);
+
+  // Probe the inference backend once on launch so AI features know up front
+  // whether the service is reachable (and can degrade gracefully if not).
+  useEffect(() => {
+    void useBackend.getState().ping();
+  }, []);
 
   if (recording) return <RecordScreen onBack={() => setRecording(false)} />;
   if (hasFile) return <EditScreen />;

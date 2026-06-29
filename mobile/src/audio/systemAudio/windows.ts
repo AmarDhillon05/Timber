@@ -53,13 +53,6 @@ export function createWindowsSystemAudio(
         display.removeTrack(t);
       });
       stream = display;
-
-      const track = stream.getAudioTracks()[0];
-      console.log(
-        '[peripheral] system-audio:',
-        track?.label || '(unnamed)',
-        track?.getSettings?.(),
-      );
     },
 
     start() {

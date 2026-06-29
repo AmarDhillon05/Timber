@@ -19,3 +19,12 @@ export interface MicRecorder {
   /** Abort without producing a result. */
   cancel(): void;
 }
+
+export interface MicRecorderOptions {
+  /**
+   * Web only: the getUserMedia deviceId of the input to capture. When omitted,
+   * the browser's default input is used. Native selects its input through the
+   * audio session (react-native-audio-api), so it ignores this.
+   */
+  deviceId?: string | null;
+}

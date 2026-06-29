@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -18,9 +18,11 @@ import {
   activeTrack,
   activeDecoding,
 } from '../state/session';
+import { useBackend } from '../state/backend';
 import { usePreview } from '../audio/usePreview';
 import { exportVideo } from '../media/exportVideo';
 import { suggestBlanket } from '../ai/suggestBlanket';
+import { InferenceError } from '../ai/inferenceApi';
 import { BlanketKnob } from '../components/BlanketKnob';
 import {
   BLANKET_TERM_KEYS,
@@ -49,6 +51,12 @@ export default function EditScreen() {
   const copyGeneratedToUser = useSession((s) => s.copyGeneratedToUser);
   const setGenerated = useSession((s) => s.setGenerated);
 
+  // Backend availability (pinged on app start). When offline we disable the
+  // suggest action and show why, rather than firing a request that will fail.
+  const backendStatus = useBackend((s) => s.status);
+  const backendError = useBackend((s) => s.error);
+  const pingBackend = () => void useBackend.getState().ping();
+
   // Track selector. A signature string (ids/names/editability, delimited by
   // tab/newline) keeps this stable across knob drags — those replace the active
   // track object but never change the tab list — so the editor doesn't
@@ -71,6 +79,32 @@ export default function EditScreen() {
     [trackSig],
   );
 
+  // Debug: dump the whole TrackFile whenever the list, selection, or decode
+  // state changes — i.e. on every editor open and every tab switch. Read from
+  // getState() (not a reactive selector) and SUMMARIZE the heavy fields: pcm
+  // (never log the raw Float32Array buffers, ~70 MB each) and the video (name +
+  // truncated uri, never the blob itself).
+  useEffect(() => {
+    const { file, activeTrackId } = useSession.getState();
+    if (!file) return;
+    const video = file.video
+      ? `${file.video.name} · ${file.video.uri.slice(0, 48)}`
+      : 'none';
+    console.log(
+      `[editor] file "${file.name}" · ${file.tracks.length} tracks · video=${video}`,
+    );
+    console.table(
+      file.tracks.map((t) => ({
+        name: t.name,
+        editable: t.editable,
+        active: t.id === activeTrackId,
+        sampleRate: t.sampleRate,
+        pcm: t.pcm ? `${t.pcm.length}ch × ${t.pcm[0]?.length ?? 0} samples` : 'decoding…',
+        uri: t.uri.slice(0, 48),
+      })),
+    );
+  }, [trackSig, activeTrackId, decoding]);
+
   const generated = mode === 'generated';
   const accent = generated ? '#22c55e' : '#ef4444';
 
@@ -81,11 +115,18 @@ export default function EditScreen() {
   const [suggesting, setSuggesting] = useState(false);
   const [prompt, setPrompt] = useState('');
 
-  // Notification micro-interaction: a toast that springs in when suggestions
-  // land, then settles back out on its own.
+  // Notification micro-interaction: a toast that springs in (on success OR
+  // failure), then settles back out on its own. Its contents are data-driven so
+  // the same animation reports both outcomes.
   const toast = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const flashToast = () => {
+  const [toastInfo, setToastInfo] = useState<{
+    tone: 'ok' | 'err';
+    title: string;
+    sub: string;
+  }>({ tone: 'ok', title: 'Suggestions ready', sub: 'Generated from your audio' });
+  const flashToast = (info: { tone: 'ok' | 'err'; title: string; sub: string }) => {
+    setToastInfo(info);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     Animated.spring(toast, {
       toValue: 1,
@@ -95,7 +136,7 @@ export default function EditScreen() {
     }).start();
     toastTimer.current = setTimeout(() => {
       Animated.timing(toast, { toValue: 0, duration: 240, useNativeDriver: false }).start();
-    }, 1900);
+    }, info.tone === 'err' ? 3200 : 1900);
   };
 
   // Press feedback for the suggest button.
@@ -106,6 +147,8 @@ export default function EditScreen() {
   // Send the active track's decoded audio to the inference service and land its
   // suggestions on that track. The track's current "Yours" values ride along as
   // an inclination the model blends toward, and the prompt text biases scoring.
+  // A backend failure is reported in the toast (and re-pings availability) rather
+  // than thrown — the service being down shouldn't break the editor.
   const onSuggest = async () => {
     const track = activeTrack(useSession.getState());
     if (!track?.pcm) return;
@@ -117,7 +160,10 @@ export default function EditScreen() {
           inclination: track.user,
         }),
       );
-      flashToast();
+      flashToast({ tone: 'ok', title: 'Suggestions ready', sub: 'Generated from your audio' });
+    } catch (e) {
+      flashToast({ tone: 'err', title: 'Suggestion failed', sub: describeBackendError(e) });
+      pingBackend(); // refresh the online/offline indicator after a failure
     } finally {
       setSuggesting(false);
     }
@@ -250,6 +296,13 @@ export default function EditScreen() {
                 multiline
                 editable={!suggesting}
               />
+              {backendStatus === 'offline' && (
+                <Pressable style={styles.offlineBanner} onPress={pingBackend} hitSlop={6}>
+                  <Text style={styles.offlineText} numberOfLines={2}>
+                    AI offline — {backendError ?? 'service unreachable'}. Tap to retry.
+                  </Text>
+                </Pressable>
+              )}
               <Animated.View
                 style={{
                   transform: [
@@ -261,13 +314,18 @@ export default function EditScreen() {
                   onPress={onSuggest}
                   onPressIn={() => pressTo(1)}
                   onPressOut={() => pressTo(0)}
-                  disabled={suggesting}
-                  style={[styles.suggestButton, suggesting && styles.suggestButtonDisabled]}
+                  disabled={suggesting || backendStatus === 'offline'}
+                  style={[
+                    styles.suggestButton,
+                    (suggesting || backendStatus === 'offline') && styles.suggestButtonDisabled,
+                  ]}
                 >
                   {suggesting ? (
                     <ActivityIndicator color="#0f172a" size="small" />
                   ) : (
-                    <Text style={styles.suggestButtonText}>✨ Suggest from audio</Text>
+                    <Text style={styles.suggestButtonText}>
+                      {backendStatus === 'checking' ? 'Checking AI…' : 'Suggest from audio'}
+                    </Text>
                   )}
                 </Pressable>
               </Animated.View>
@@ -301,6 +359,7 @@ export default function EditScreen() {
         <Animated.View
           style={[
             styles.toast,
+            toastInfo.tone === 'err' && styles.toastErr,
             {
               opacity: toast,
               transform: [
@@ -310,12 +369,12 @@ export default function EditScreen() {
             },
           ]}
         >
-          <View style={styles.toastIcon}>
-            <Text style={styles.toastCheck}>✓</Text>
+          <View style={[styles.toastIcon, toastInfo.tone === 'err' && styles.toastIconErr]}>
+            <Text style={styles.toastCheck}>{toastInfo.tone === 'err' ? '!' : '✓'}</Text>
           </View>
-          <View>
-            <Text style={styles.toastTitle}>Suggestions ready</Text>
-            <Text style={styles.toastSub}>Generated from your audio</Text>
+          <View style={styles.toastTextCol}>
+            <Text style={styles.toastTitle}>{toastInfo.title}</Text>
+            <Text style={styles.toastSub} numberOfLines={2}>{toastInfo.sub}</Text>
           </View>
         </Animated.View>
       </View>
@@ -323,6 +382,24 @@ export default function EditScreen() {
       <StatusBar style="light" />
     </View>
   );
+}
+
+// Turn a failed /suggest call into a short, user-facing reason. Each backend
+// failure mode (service down, slow, HTTP error, bad body) gets its own line.
+function describeBackendError(e: unknown): string {
+  if (e instanceof InferenceError) {
+    switch (e.kind) {
+      case 'unreachable':
+        return 'Inference service is offline.';
+      case 'timeout':
+        return 'The service took too long to respond.';
+      case 'http':
+        return `Service error (${e.status}).`;
+      case 'malformed':
+        return 'The service returned an unexpected response.';
+    }
+  }
+  return 'Something went wrong.';
 }
 
 // Live readout of the active track's usage tally. Subscribes on its own (like a
@@ -575,6 +652,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
     elevation: 20,
   },
+  toastErr: { borderColor: '#7f1d1d' },
   toastIcon: {
     width: 28,
     height: 28,
@@ -587,12 +665,14 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 0 },
   },
+  toastIconErr: { backgroundColor: '#ef4444', shadowColor: '#ef4444' },
   toastCheck: {
     color: '#04130a',
     fontSize: 15,
     fontWeight: '900',
     lineHeight: 18,
   },
+  toastTextCol: { flexShrink: 1 },
   toastTitle: {
     color: '#f8fafc',
     fontSize: 14,
@@ -603,4 +683,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 1,
   },
+  offlineBanner: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(127,29,29,0.35)',
+    borderWidth: 1,
+    borderColor: '#7f1d1d',
+  },
+  offlineText: { color: '#fca5a5', fontSize: 12 },
 });
